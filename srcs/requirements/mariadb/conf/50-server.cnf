@@ -1,0 +1,15 @@
+[mysqld]
+# Dossier où MariaDB stocke ses données
+datadir = /var/lib/mysql
+
+# Fichier socket pour les connexions locales
+socket = /run/mysqld/mysqld.sock
+
+# Accepte les connexions de tous les conteneurs du réseau Docker
+bind_address = 0.0.0.0
+
+# Port standard de MariaDB
+port = 3306
+
+# Utilisateur qui fait tourner MariaDB
+user = mysql
