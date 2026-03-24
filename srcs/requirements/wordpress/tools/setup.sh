@@ -1,34 +1,48 @@
-FROM debian:bullseye
+#!/bin/sh
+set -e
 
-# Installation de PHP, php-fpm, et les extensions nécessaires pour WordPress
-RUN apt-get update && apt-get install -y \
-    php \
-    php-fpm \
-    php-mysql \
-    php-curl \
-    php-dom \
-    php-exif \
-    php-mbstring \
-    php-zip \
-    wget \
-    curl \
-    mariadb-client \
-    && rm -rf /var/lib/apt/lists/*
+WP_PATH="/var/www/wordpress"
 
-# Création du dossier WordPress
-RUN mkdir -p /var/www/html
+# Attente de MariaDB
+echo "Waiting for MariaDB..."
+until mysql -u ${MYSQL_USER} -p${MYSQL_PASSWORD} -h mariadb -e "SELECT 1" > /dev/null 2>&1; do
+    sleep 2
+done
+echo "MariaDB is ready!"
 
-# Téléchargement et installation de wp-cli
-# wp-cli c'est un outil en ligne de commande pour gérer WordPress
-RUN wget https://raw.githubusercontent.com/wp-cli/builds/gh-pages/phar/wp-cli.phar \
-    && chmod +x wp-cli.phar \
-    && mv wp-cli.phar /usr/local/bin/wp
+# Configuration de WordPress
+if [ ! -f "$WP_PATH/wp-config.php" ]; then
 
-# Copie du script de configuration
-COPY tools/setup.sh /usr/local/bin/setup.sh
-RUN chmod +x /usr/local/bin/setup.sh
+    # Création du wp-config.php avec les infos de la base de données
+    wp config create \
+        --path=$WP_PATH \
+        --dbname=${MYSQL_DATABASE} \
+        --dbuser=${MYSQL_USER} \
+        --dbpass=${MYSQL_PASSWORD} \
+        --dbhost=mariadb:3306 \
+        --allow-root
 
-# Port sur lequel php-fpm écoute
-EXPOSE 9000
+    # Installation de WordPress avec le compte admin
+    # Le nom admin ne doit pas contenir admin/administrator (obligatoire selon le sujet)
+    wp core install \
+        --path=$WP_PATH \
+        --url="https://${DOMAIN_NAME}" \
+        --title="${WP_TITLE}" \
+        --admin_user="${WP_ADMIN}" \
+        --admin_password="${WP_ADMIN_PASSWORD}" \
+        --admin_email="${WP_ADMIN_EMAIL}" \
+        --allow-root \
+        --skip-email
 
-ENTRYPOINT ["/usr/local/bin/setup.sh"]
+    # Création d'un utilisateur standard (obligatoire selon le sujet)
+    wp user create "${WP_USER}" "${WP_USER_EMAIL}" \
+        --user_pass="${WP_USER_PASSWORD}" \
+        --role=editor \
+        --path=$WP_PATH \
+        --allow-root
+
+fi
+
+# Lancement de php-fpm en foreground
+echo "Starting PHP-FPM..."
+exec /usr/sbin/php-fpm7.4 -F
