@@ -3,17 +3,24 @@ set -e
 
 WP_PATH="/var/www/wordpress"
 
-# Attente de MariaDB
+# je copie les fichiers wordpress dans le volume s'ils n'y sont pas encore
+if [ ! -f "$WP_PATH/wp-settings.php" ]; then
+    echo "Copying WordPress files to volume..."
+    cp -r /usr/src/wordpress/. "$WP_PATH/"
+    chown -R www-data:www-data "$WP_PATH"
+fi
+
+# j'attends que mariadb soit prêt avant de continuer
 echo "Waiting for MariaDB..."
 until mysql -u ${MYSQL_USER} -p${MYSQL_PASSWORD} -h mariadb -e "SELECT 1" > /dev/null 2>&1; do
     sleep 2
 done
 echo "MariaDB is ready!"
 
-# Configuration de WordPress
+# je configure wordpress seulement si ce n'est pas déjà fait
 if [ ! -f "$WP_PATH/wp-config.php" ]; then
 
-    # Création du wp-config.php avec les infos de la base de données
+    # je génère le wp-config.php avec les infos de connexion à la base
     wp config create \
         --path=$WP_PATH \
         --dbname=${MYSQL_DATABASE} \
@@ -22,8 +29,7 @@ if [ ! -f "$WP_PATH/wp-config.php" ]; then
         --dbhost=mariadb:3306 \
         --allow-root
 
-    # Installation de WordPress avec le compte admin
-    # Le nom admin ne doit pas contenir admin/administrator (obligatoire selon le sujet)
+    # j'installe wordpress avec le compte admin
     wp core install \
         --path=$WP_PATH \
         --url="https://${DOMAIN_NAME}" \
@@ -34,7 +40,7 @@ if [ ! -f "$WP_PATH/wp-config.php" ]; then
         --allow-root \
         --skip-email
 
-    # Création d'un utilisateur standard (obligatoire selon le sujet)
+    # je crée un deuxième utilisateur avec le rôle éditeur
     wp user create "${WP_USER}" "${WP_USER_EMAIL}" \
         --user_pass="${WP_USER_PASSWORD}" \
         --role=editor \
@@ -43,6 +49,6 @@ if [ ! -f "$WP_PATH/wp-config.php" ]; then
 
 fi
 
-# Lancement de php-fpm en foreground
+# je lance php-fpm en foreground pour que le container reste actif
 echo "Starting PHP-FPM..."
 exec /usr/sbin/php-fpm7.4 -F

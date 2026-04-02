@@ -1,15 +1,15 @@
 [mysqld]
-# Dossier où MariaDB stocke ses données
+# je stocke les données ici
 datadir = /var/lib/mysql
 
-# Fichier socket pour les connexions locales
+# socket pour les connexions locales
 socket = /run/mysqld/mysqld.sock
 
-# Accepte les connexions de tous les conteneurs du réseau Docker
+# j'écoute sur toutes les interfaces pour que wordpress puisse se connecter
 bind_address = 0.0.0.0
 
-# Port standard de MariaDB
+# port par défaut de mariadb
 port = 3306
 
-# Utilisateur qui fait tourner MariaDB
+# je fais tourner mariadb avec l'user mysql
 user = mysql

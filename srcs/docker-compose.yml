@@ -1,94 +1,65 @@
-# Version de la syntaxe docker-compose utilisée
 version: '3.8'
 
 services:
 
-  # --- CONTAINER MARIADB ---
-  # Base de données du site WordPress
+  # ma base de données
   mariadb:
-    # Construit l'image depuis le Dockerfile dans requirements/mariadb
     build: ./requirements/mariadb
-    # Nom du container (permet de l'appeler "mariadb" depuis les autres containers)
     container_name: mariadb
-    # Redémarre automatiquement si le container crash
     restart: always
-    # Charge les variables d'environnement depuis le fichier .env
-    # (nom de la BDD, user, mots de passe...)
     env_file:
       - .env
-    # Monte le volume persistant dans /var/lib/mysql
-    # C'est là que MariaDB stocke tous les fichiers de la base de données
+    # je persiste les données dans un volume pour qu'elles survivent au restart
     volumes:
       - mariadb_data:/var/lib/mysql
-    # Connecte ce container au réseau "inception"
-    # Permet la communication avec wordpress sans exposer le port à l'extérieur
     networks:
       - inception
 
-  # --- CONTAINER WORDPRESS ---
-  # Exécute WordPress via php-fpm, sans nginx
+  # wordpress tourne via php-fpm, pas de nginx dedans
   wordpress:
-    build: ./requirements/wordpress 
+    build: ./requirements/wordpress
     container_name: wordpress
     restart: always
-    # Attend que mariadb soit démarré avant de lancer ce container
-    # (WordPress a besoin de la BDD pour s'installer)
+    # j'attends que mariadb soit up avant de démarrer
     depends_on:
       - mariadb
     env_file:
       - .env
-    # Monte le volume partagé dans /var/www/wordpress
-    # Ce dossier contient tous les fichiers PHP de WordPress
     volumes:
       - wordpress_data:/var/www/wordpress
     networks:
       - inception
-    # expose rend le port accessible aux autres containers du même réseau
-    # mais PAS à l'extérieur (contrairement à ports:)
-    # Nginx va se connecter à wordpress:9000 pour traiter les fichiers PHP
+    # j'expose le port 9000 uniquement aux autres containers, pas à l'hôte
     expose:
       - "9000"
 
-  # --- CONTAINER NGINX ---
-  # Seul point d'entrée de l'infrastructure, gère le HTTPS
+  # nginx est le seul point d'entrée, il gère le HTTPS
   nginx:
     build: ./requirements/nginx
     container_name: nginx
     restart: always
-    # ports: publie le port sur la machine hôte (accessible depuis l'extérieur)
-    # "443:443" = port 443 de la machine hôte → port 443 du container
-    # C'est le seul port ouvert vers l'extérieur (obligatoire selon le sujet)
+    # je publie le port 445 de l'hôte vers le 443 du container
     ports:
-      - "443:443"
-    # Attend que wordpress soit prêt (php-fpm doit tourner avant nginx)
+      - "445:443"
     depends_on:
       - wordpress
     env_file:
       - .env
-    # Partage le même volume wordpress que le container wordpress
-    # Nginx a besoin des fichiers PHP pour les passer à php-fpm
+    # nginx a besoin des fichiers php de wordpress pour les passer à php-fpm
     volumes:
       - wordpress_data:/var/www/wordpress
     networks:
       - inception
 
-# --- VOLUMES PERSISTANTS ---
-# Les données survivent même si les containers sont supprimés
 volumes:
-  # Volume pour la base de données MariaDB
-  # device pointe vers le dossier sur la machine hôte (/home/nsmail/data/mariadb)
-  # Le Makefile crée ce dossier avant de lancer docker compose
+  # je pointe vers un dossier réel sur l'hôte pour garder les données
   mariadb_data:
     driver: local
     driver_opts:
-      # type: none + o: bind = volume nommé qui pointe vers un dossier existant
-      # C'est différent d'un bind mount direct : on respecte la règle du sujet
       type: none
       o: bind
       device: /home/nsmail/data/mariadb
 
-  # Volume pour les fichiers WordPress
-  # Partagé entre wordpress et nginx (nginx a besoin des fichiers .php)
   wordpress_data:
     driver: local
     driver_opts:
@@ -96,10 +67,7 @@ volumes:
       o: bind
       device: /home/nsmail/data/wordpress
 
-# --- RÉSEAU ---
+# réseau bridge isolé, les containers se parlent par leur nom de service
 networks:
-  # Réseau bridge isolé entre les 3 containers
-  # bridge = chaque container a sa propre IP, ils communiquent par nom (mariadb, wordpress, nginx)
-  # Interdit d'utiliser network: host ou --link (selon le sujet)
   inception:
     driver: bridge
